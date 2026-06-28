@@ -320,6 +320,18 @@ function formatBiz(v) {
   if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,5)}-${d.slice(5)}`;
   return String(v).trim();
 }
+// 해외거래처: 한자(CJK) 제거하고 영문만, Ltd/Limited로 끝나면 거기까지만
+function cleanCompany(v) {
+  if (v === '' || v == null) return '';
+  let s = String(v)
+    .replace(/[　-〿㐀-鿿豈-﫿＀-￯]/g, ' ') // 한자·전각기호 제거
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s:：\-_,.]+/, '')   // 라벨 구분기호 등 앞쪽 정리
+    .trim();
+  const m = s.match(/^(.*?\bLtd\b\.?)/i) || s.match(/^(.*?\bLimited\b)/i);
+  if (m) s = m[1].trim();
+  return s.trim();
+}
 
 // ── DB 인덱스 ──────────────────────────────────────────
 function pick(row, names) {
@@ -395,8 +407,8 @@ function extractMeta(rows) {
   let 해외거래처 = '';
   for (let i = 0; i < Math.min(rows.length, 4) && !해외거래처; i++)
     for (let j = 0; j < (rows[i]||[]).length; j++) {
-      const v = String(rows[i][j]).trim();
-      if (v) { 해외거래처 = v; break; }
+      const cleaned = cleanCompany(rows[i][j]);
+      if (cleaned) { 해외거래처 = cleaned; break; }
     }
 
   let 사업자번호 = '';
