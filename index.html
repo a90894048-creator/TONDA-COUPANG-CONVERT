@@ -313,6 +313,13 @@ function formatHs(v) {
   if (/^\d{10}$/.test(s)) return `${s.slice(0,4)}.${s.slice(4,6)}-${s.slice(6)}`;
   return String(v).trim();
 }
+// 사업자번호: 구분기호 없는 10자리면 ###-##-##### 로 표기
+function formatBiz(v) {
+  if (v === '' || v == null) return '';
+  const d = String(v).replace(/[^0-9]/g, '');
+  if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,5)}-${d.slice(5)}`;
+  return String(v).trim();
+}
 
 // ── DB 인덱스 ──────────────────────────────────────────
 function pick(row, names) {
@@ -397,13 +404,17 @@ function extractMeta(rows) {
   for (let i = 0; i < rows.length; i++)
     for (let j = 0; j < (rows[i]||[]).length; j++) {
       if (String(rows[i][j]).includes('营业执照号')) {
+        // 营业执照号 옆 셀: 하이픈 형식 또는 구분기호 없는 10자리 모두 인식
         for (let k = j + 1; k < Math.min(j + 5, (rows[i]||[]).length); k++) {
-          const m = String(rows[i][k]).match(/\d{3}-\d{2}-\d{5}/);
-          if (m) { 사업자번호 = m[0]; break outer; }
+          const cell = String(rows[i][k] ?? '').trim();
+          if (!cell) continue;
+          const mh = cell.match(/\d{3}-\d{2}-\d{5}/);
+          if (mh) { 사업자번호 = mh[0]; break outer; }
+          if (cell.replace(/[^0-9]/g, '').length === 10) { 사업자번호 = cell.replace(/[^0-9]/g, ''); break outer; }
         }
       }
     }
-  if (!사업자번호) { // 폴백: 시트 전체에서 사업자번호 패턴 탐색
+  if (!사업자번호) { // 폴백: 시트 전체에서 하이픈 형식만 탐색(HS코드 등 오인식 방지)
     for (let i = 0; i < rows.length && !사업자번호; i++)
       for (const c of (rows[i]||[])) {
         const m = String(c).match(/\d{3}-\d{2}-\d{5}/);
@@ -420,7 +431,7 @@ function extractMeta(rows) {
         if (m) { 입항지 = m[1].toUpperCase().replace('PYEONGTAEK','PYONGTAEK'); break; }
       }
     }
-  return { 해외거래처, 사업자번호, 입항지 };
+  return { 해외거래처, 사업자번호: formatBiz(사업자번호), 입항지 };
 }
 
 // ── 품목 행 추출 ──────────────────────────────────────
@@ -745,7 +756,7 @@ document.getElementById('db-template-btn').addEventListener('click', () => {
   const map = new Map();
   for (const k of Object.keys(state.dbByBiz)) {
     const d = state.dbByBiz[k];
-    map.set(k, { 사업자번호: d.사업자번호 || k, 통관고유번호: d.통관고유번호 || '', 사업자명: d.사업자명 || '' });
+    map.set(k, { 사업자번호: formatBiz(d.사업자번호 || k), 통관고유번호: d.통관고유번호 || '', 사업자명: d.사업자명 || '' });
   }
   let added = 0;
   for (const r of getAllRows()) {
