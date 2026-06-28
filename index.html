@@ -678,7 +678,7 @@ function renderResult() {
   document.getElementById('preview-head').innerHTML =
     '<tr>' + COLUMNS.map(c => `<th>${esc(c.header)}</th>`).join('') + '</tr>';
 
-  const view = rows.slice(0, 50);
+  const view = rows;   // 전체 미리보기 (제한 해제)
   document.getElementById('preview-body').innerHTML = view.map(r => {
     const tds = COLUMNS.map(c => {
       if (c.type === 'img')
@@ -696,7 +696,7 @@ function renderResult() {
   }).join('');
 
   note.style.display = 'block';
-  note.textContent = rows.length > 50 ? `상위 50행 미리보기 (전체 ${rows.length}품목)` : `전체 ${rows.length}품목`;
+  note.textContent = `전체 ${rows.length}품목`;
 }
 
 const _urlCache = new WeakMap();
