@@ -745,7 +745,7 @@ document.getElementById('db-template-btn').addEventListener('click', () => {
   for (const r of getAllRows()) {
     if (!r.사업자번호) continue;
     const k = normBiz(r.사업자번호);
-    if (!map.has(k)) { map.set(k, { 사업자번호: r.사업자번호, 통관고유번호: '', 사업자명: r.해외거래처 }); added++; }
+    if (!map.has(k)) { map.set(k, { 사업자번호: r.사업자번호, 통관고유번호: '', 사업자명: '' }); added++; }
   }
   const list = [...map.values()];
   if (!list.length) { alert('DB도 비어있고 추출된 사업자번호도 없습니다.'); return; }
