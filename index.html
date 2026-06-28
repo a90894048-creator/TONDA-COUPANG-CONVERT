@@ -467,32 +467,32 @@ function extractRows(rows, headerRowIdx, colMap) {
   return out;
 }
 
-// ── 이미지 추출 (첫 번째 제품 이미지) ──────────────────
-async function extractFirstImage(arrayBuffer, sheetIdx, imageCol, dataStartRow) {
+// ── 이미지 추출 (제품 행 → 이미지 매핑, 전체) ──────────
+async function extractImages(arrayBuffer, sheetIdx, imageCol) {
   try {
     const zip = await JSZip.loadAsync(arrayBuffer);
     const wbFile = zip.file('xl/workbook.xml');
     const wbRelsFile = zip.file('xl/_rels/workbook.xml.rels');
-    if (!wbFile || !wbRelsFile) return null;
+    if (!wbFile || !wbRelsFile) return {};
     const wbXml = await wbFile.async('text');
     const wbRelsXml = await wbRelsFile.async('text');
     const sheetOrder = [...wbXml.matchAll(/<sheet\b[^>]*\br:id="([^"]+)"/g)].map(m => m[1]);
-    if (sheetIdx >= sheetOrder.length) return null;
+    if (sheetIdx >= sheetOrder.length) return {};
     const targetRid = sheetOrder[sheetIdx];
     const wbRels = [...wbRelsXml.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)];
     const sheetRel = wbRels.find(m => m[1] === targetRid);
-    if (!sheetRel) return null;
+    if (!sheetRel) return {};
     const sheetPath = 'xl/' + sheetRel[2].replace(/^\.\.\//, '');
     const sheetRelsPath = sheetPath.replace(/\/([^/]+)$/, '/_rels/$1.rels');
     const srf = zip.file(sheetRelsPath);
-    if (!srf) return null;
+    if (!srf) return {};
     const sheetRelsXml = await srf.async('text');
     const drawingRel = sheetRelsXml.match(/Type="[^"]*\/drawing"[^>]*Target="([^"]+)"/);
-    if (!drawingRel) return null;
+    if (!drawingRel) return {};
     const sheetDir = sheetPath.replace(/\/[^/]+$/, '/');
     const drawingPath = (sheetDir + drawingRel[1]).replace(/[^/]+\/\.\.\//g, '');
     const df = zip.file(drawingPath);
-    if (!df) return null;
+    if (!df) return {};
     const drawingXml = await df.async('text');
 
     // drawing rels → 이미지 파일
@@ -514,9 +514,10 @@ async function extractFirstImage(arrayBuffer, sheetIdx, imageCol, dataStartRow) 
       }
     }
 
-    // 이미지 컬럼의 앵커 중 가장 윗행(첫 제품) 선택
+    // 이미지 컬럼의 모든 앵커 → { 엑셀행번호: 이미지 } 매핑
+    const map = {};
     const anchorRe = /<xdr:(twoCellAnchor|oneCellAnchor)[\s\S]*?<\/xdr:\1>/g;
-    let am, best = null;
+    let am;
     while ((am = anchorRe.exec(drawingXml)) !== null) {
       const a = am[0];
       const fr = a.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
@@ -524,12 +525,11 @@ async function extractFirstImage(arrayBuffer, sheetIdx, imageCol, dataStartRow) 
       const rid = a.match(/r:embed="([^"]+)"/) || a.match(/r:id="([^"]+)"/);
       if (!fr || !fc || !rid || !rIdToImg[rid[1]]) continue;
       const row = parseInt(fr[1]), col = parseInt(fc[1]);
-      if (imageCol != null && col !== imageCol) continue;
-      if (row < dataStartRow) continue;
-      if (!best || row < best.row) best = { row, img: rIdToImg[rid[1]] };
+      if (imageCol != null && col !== imageCol) continue;   // 이미지 컬럼만(법인사진 등 제외)
+      if (map[row] == null) map[row] = rIdToImg[rid[1]];     // 한 행에 여러 이미지면 첫 번째
     }
-    return best ? best.img : null;
-  } catch (e) { console.warn('이미지 추출 실패', e); return null; }
+    return map;
+  } catch (e) { console.warn('이미지 추출 실패', e); return {}; }
 }
 
 // ── 파일 처리 ──────────────────────────────────────────
@@ -551,7 +551,8 @@ async function processFile(entry, file) {
     Object.assign(entry, extractMeta(rows));
     entry.rows = extractRows(rows, headerRowIdx, colMap);
     if (/\.xlsx$/i.test(file.name)) {
-      entry.image = await extractFirstImage(ab, sheetIdx, colMap.이미지, headerRowIdx + 1);
+      const imgMap = await extractImages(ab, sheetIdx, colMap.이미지);
+      entry.rows.forEach(r => { r.image = imgMap[r._row] || null; });
     }
     if (!entry.rows.length) { entry.status = 'err'; entry.error = '품목 데이터 없음'; }
     else if (!entry.사업자번호) { entry.status = 'warn'; entry.error = '사업자번호 누락'; }
@@ -597,7 +598,7 @@ function getAllRows() {
     const db = lookupDb(f.사업자번호);
     f.rows.forEach((r, idx) => {
       all.push({
-        이미지: idx === 0 ? f.image : null,
+        이미지: r.image || null,
         해외거래처: f.해외거래처,
         사업자번호: f.사업자번호,
         통관고유번호: db ? db.통관고유번호 : '',
