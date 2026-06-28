@@ -243,10 +243,28 @@ const DB_FILE    = 'database.xlsx';
 const RAW_URL    = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${DB_FILE}`;
 const API_URL    = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DB_FILE}`;
 
-// 출력 컬럼 정의 (이미지는 ExcelJS에서 별도 처리)
-const OUT_HEADERS = [
-  '이미지','해외거래처','사업자번호','통관고유번호','사업자명','입항지',
-  'Descriptions','수량','단가','총액','순중량','총중량','성분','세번','파일명'
+// 출력 컬럼 정의 (미리보기·엑셀 저장 공통 소스)
+// field: getAllRows() 데이터 키 (null = 빈칸 컬럼) / type: img·hs·num·text
+const COLUMNS = [
+  { header: '이미지',       field: '이미지',       type: 'img',  width: 12 },
+  { header: '입항지',       field: '입항지',       type: 'text', width: 11 },
+  { header: '사업자명',     field: '사업자명',     type: 'text', width: 20 },
+  { header: '통관고유번호', field: '통관고유번호', type: 'text', width: 16, missHi: true },
+  { header: '해외거래처',   field: '해외거래처',   type: 'text', width: 30 },
+  { header: '세번부호',     field: '세번',         type: 'hs',   width: 15 },
+  { header: '세율구분',     field: null,           type: 'text', width: 9  },
+  { header: '규격1',        field: 'Descriptions', type: 'text', width: 26 },
+  { header: '규격2',        field: null,           type: 'text', width: 14 },
+  { header: '규격3',        field: null,           type: 'text', width: 14 },
+  { header: '성분',         field: '성분',         type: 'text', width: 22 },
+  { header: '수량',         field: '수량',         type: 'num',  width: 8  },
+  { header: '단위',         field: null,           type: 'text', width: 8  },
+  { header: '단가',         field: '단가',         type: 'num',  width: 10 },
+  { header: '총액',         field: '총액',         type: 'num',  width: 11 },
+  { header: '순중량',       field: '순중량',       type: 'num',  width: 9  },
+  { header: 'FILE',         field: null,           type: 'text', width: 10 },
+  { header: '총중량',       field: '총중량',       type: 'num',  width: 9  },
+  { header: '파일명',       field: '파일명',       type: 'text', width: 40 },
 ];
 // 헤더 행에서 찾을 컬럼 라벨 (중국어 + 한국어, 공백제거·소문자 비교)
 const COLDEFS = {
@@ -630,28 +648,20 @@ function renderResult() {
   empty.style.display = 'none';
   table.style.display = 'table';
 
-  const cols = OUT_HEADERS.filter(h => h !== '파일명');
   document.getElementById('preview-head').innerHTML =
-    '<tr>' + cols.map(h => `<th>${h}</th>`).join('') + '<th>파일명</th></tr>';
+    '<tr>' + COLUMNS.map(c => `<th>${esc(c.header)}</th>`).join('') + '</tr>';
 
   const view = rows.slice(0, 50);
   document.getElementById('preview-body').innerHTML = view.map(r => {
-    const tds = [];
-    tds.push(`<td>${r.이미지 ? `<img class="thumb" src="${imgUrl(r.이미지)}">` : '<span class="no-img">-</span>'}</td>`);
-    tds.push(`<td>${esc(r.해외거래처)}</td>`);
-    tds.push(`<td class="${r.사업자번호 ? '' : 'miss-biz'}">${esc(r.사업자번호) || '누락'}</td>`);
-    tds.push(`<td class="${r.통관고유번호 ? '' : 'miss'}">${esc(r.통관고유번호) || '미등록'}</td>`);
-    tds.push(`<td>${esc(r.사업자명)}</td>`);
-    tds.push(`<td>${esc(r.입항지)}</td>`);
-    tds.push(`<td>${esc(r.Descriptions)}</td>`);
-    tds.push(`<td class="num">${esc(r.수량)}</td>`);
-    tds.push(`<td class="num">${esc(r.단가)}</td>`);
-    tds.push(`<td class="num">${esc(r.총액)}</td>`);
-    tds.push(`<td class="num">${esc(r.순중량)}</td>`);
-    tds.push(`<td class="num">${esc(r.총중량)}</td>`);
-    tds.push(`<td>${esc(r.성분)}</td>`);
-    tds.push(`<td class="hs">${esc(r.세번)}</td>`);
-    tds.push(`<td>${esc(r.파일명)}</td>`);
+    const tds = COLUMNS.map(c => {
+      if (c.type === 'img')
+        return `<td>${r.이미지 ? `<img class="thumb" src="${imgUrl(r.이미지)}">` : '<span class="no-img">-</span>'}</td>`;
+      const v = c.field ? r[c.field] : '';
+      if (c.missHi && !v) return `<td class="miss">미등록</td>`;
+      if (c.type === 'hs')  return `<td class="hs">${esc(v)}</td>`;
+      if (c.type === 'num') return `<td class="num">${esc(v)}</td>`;
+      return `<td>${esc(v)}</td>`;
+    });
     return '<tr>' + tds.join('') + '</tr>';
   }).join('');
 
@@ -678,23 +688,7 @@ document.getElementById('download-btn').addEventListener('click', async () => {
   try {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('통합결과');
-    ws.columns = [
-      { header: '이미지', key: 'img', width: 12 },
-      { header: '해외거래처', key: '해외거래처', width: 30 },
-      { header: '사업자번호', key: '사업자번호', width: 15 },
-      { header: '통관고유번호', key: '통관고유번호', width: 16 },
-      { header: '사업자명', key: '사업자명', width: 20 },
-      { header: '입항지', key: '입항지', width: 11 },
-      { header: 'Descriptions', key: 'Descriptions', width: 26 },
-      { header: '수량', key: '수량', width: 8 },
-      { header: '단가', key: '단가', width: 10 },
-      { header: '총액', key: '총액', width: 11 },
-      { header: '순중량', key: '순중량', width: 9 },
-      { header: '총중량', key: '총중량', width: 9 },
-      { header: '성분', key: '성분', width: 22 },
-      { header: '세번', key: '세번', width: 15 },
-      { header: '파일명', key: '파일명', width: 40 },
-    ];
+    ws.columns = COLUMNS.map((c, idx) => ({ header: c.header, key: 'c' + idx, width: c.width }));
     ws.getRow(1).eachCell(c => {
       c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1A2E' } };
@@ -702,23 +696,22 @@ document.getElementById('download-btn').addEventListener('click', async () => {
     });
     ws.getRow(1).height = 22;
 
-    rows.forEach((r, i) => {
-      const row = ws.addRow({
-        img: '',
-        해외거래처: r.해외거래처, 사업자번호: r.사업자번호, 통관고유번호: r.통관고유번호,
-        사업자명: r.사업자명, 입항지: r.입항지, Descriptions: r.Descriptions,
-        수량: r.수량, 단가: r.단가, 총액: r.총액, 순중량: r.순중량, 총중량: r.총중량,
-        성분: r.성분, 세번: r.세번, 파일명: r.파일명,
-      });
-      row.alignment = { vertical: 'middle' };
-      // 강조: 사업자번호/통관고유번호 누락
-      if (!r.사업자번호) row.getCell('사업자번호').fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFE0B2' } };
-      if (!r.통관고유번호) row.getCell('통관고유번호').fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFF9C4' } };
+    const imgColIdx = COLUMNS.findIndex(c => c.type === 'img');     // 0-indexed
+    const tongIdx   = COLUMNS.findIndex(c => c.missHi);
 
-      if (r.이미지 && r.이미지.ab) {
+    rows.forEach((r, i) => {
+      const obj = {};
+      COLUMNS.forEach((c, idx) => { obj['c' + idx] = (c.type === 'img' || !c.field) ? '' : (r[c.field] ?? ''); });
+      const row = ws.addRow(obj);
+      row.alignment = { vertical: 'middle' };
+      // 강조: 통관고유번호 누락(노랑)
+      if (tongIdx >= 0 && !r.통관고유번호)
+        row.getCell('c' + tongIdx).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFF9C4' } };
+
+      if (r.이미지 && r.이미지.ab && imgColIdx >= 0) {
         row.height = 54;
         const id = wb.addImage({ buffer: r.이미지.ab, extension: r.이미지.ext || 'jpeg' });
-        ws.addImage(id, { tl: { col: 0, row: i + 1 }, br: { col: 1, row: i + 2 }, editAs: 'oneCell' });
+        ws.addImage(id, { tl: { col: imgColIdx, row: i + 1 }, br: { col: imgColIdx + 1, row: i + 2 }, editAs: 'oneCell' });
       }
     });
 
