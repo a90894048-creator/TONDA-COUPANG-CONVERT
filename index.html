@@ -94,6 +94,7 @@
   td.hs  { font-family: monospace; color: #1a6fc4; font-weight: 600; }
   td.miss { background: #fffde7; color: #e65100; font-weight: 500; }
   td.miss-biz { background: #fff3e0; color: #e65100; font-weight: 500; }
+  td.bad-hs { background: #ffebee; color: #c62828; font-weight: 700; }
   .thumb { max-height: 54px; max-width: 70px; border-radius: 4px; display: block; }
   .no-img { color: #ccc; font-size: 11px; }
 
@@ -658,7 +659,10 @@ function renderResult() {
         return `<td>${r.이미지 ? `<img class="thumb" src="${imgUrl(r.이미지)}">` : '<span class="no-img">-</span>'}</td>`;
       const v = c.field ? r[c.field] : '';
       if (c.missHi && !v) return `<td class="miss">미등록</td>`;
-      if (c.type === 'hs')  return `<td class="hs">${esc(v)}</td>`;
+      if (c.type === 'hs') {
+        const bad = v !== '' && v != null && String(v).replace(/[^0-9]/g, '').length !== 10;
+        return `<td class="hs${bad ? ' bad-hs' : ''}">${esc(v)}</td>`;
+      }
       if (c.type === 'num') return `<td class="num">${esc(v)}</td>`;
       return `<td>${esc(v)}</td>`;
     });
@@ -698,6 +702,7 @@ document.getElementById('download-btn').addEventListener('click', async () => {
 
     const imgColIdx = COLUMNS.findIndex(c => c.type === 'img');     // 0-indexed
     const tongIdx   = COLUMNS.findIndex(c => c.missHi);
+    const hsIdx     = COLUMNS.findIndex(c => c.type === 'hs');
 
     rows.forEach((r, i) => {
       const obj = {};
@@ -707,6 +712,12 @@ document.getElementById('download-btn').addEventListener('click', async () => {
       // 강조: 통관고유번호 누락(노랑)
       if (tongIdx >= 0 && !r.통관고유번호)
         row.getCell('c' + tongIdx).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFF9C4' } };
+      // 강조: 세번부호가 10자리가 아니면 빨강
+      if (hsIdx >= 0 && r.세번 !== '' && r.세번 != null && String(r.세번).replace(/[^0-9]/g, '').length !== 10) {
+        const cell = row.getCell('c' + hsIdx);
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFC7CE' } };
+        cell.font = { color:{ argb:'FF9C0006' }, bold: true };
+      }
 
       if (r.이미지 && r.이미지.ab && imgColIdx >= 0) {
         row.height = 54;
